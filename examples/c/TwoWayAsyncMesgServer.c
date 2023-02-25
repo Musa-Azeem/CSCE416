@@ -1,5 +1,5 @@
 /*
- * Implementation of one-way message server in C
+ * Implementation of two-way async message server in C
  * By Srihari Nelakuditi for CSCE 416
  */
 
@@ -111,19 +111,51 @@ int main(int argc, char *argv[])
   /* No other clients, close the server socket */
   close(serverSock);
 
-  /* Keep serving the client */
+  /* Keep sending and receiving messages from the client */
   while (1) {
-    /* Wait to receive a message */
-    char *message = recvMesg(clientSock, buffer);
+    /* Make a list of inputs to watch for */
+    fd_set inputSet;
+    FD_ZERO(&inputSet);
+    FD_SET(0, &inputSet);
+    FD_SET(clientSock, &inputSet);
 
-    /* if message is NULL ==> client closed connection */
-    if (message == NULL) {
-      printf("Client closed connection\n");
-      close(clientSock);
-      break;
+    /* Wait for a message from keyboard or socket */
+    if (select(clientSock+1, &inputSet, NULL, NULL, NULL) == -1) {
+      perror("select");
+      exit(1);
     }
 
-    /* Display the message */
-    printf("Client: %s", message);
+    /* Check if there is a message from the keyboard */
+    if (FD_ISSET(0, &inputSet)) {
+      /* Read a line from the keyboard */
+      char *line = fgets(buffer, MAXMESGLEN, stdin);
+
+      /* If EOF, close the connection */
+      if (line == NULL) {
+        printf("*** Server closing connection\n");
+        break;
+      }
+
+      /* Send the line to the server */
+      write(clientSock, line, strlen(line));
+    }
+
+    /* Check if there is a message from the client */
+    if (FD_ISSET(clientSock, &inputSet)) {
+      char *message = recvMesg(clientSock, buffer);
+
+      /* if message is NULL ==> client closed connection */
+      if (message == NULL) {
+        printf("*** Client closed connection\n");
+        close(clientSock);
+        break;
+      }
+
+      /* Display the message */
+      printf("Client: %s", message);
+    }
   }
+
+  /* Close the connection */
+  close(clientSock);
 }
