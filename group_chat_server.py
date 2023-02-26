@@ -30,93 +30,82 @@ print('Waiting for a client ...')
 
 clients = {}                    # Dictionary of clients
 inputs = [stdin, server_sock]   # start by only listening on server socket and stdin
-outputs = []                    # Start with no output client sockets
 
 # Main loop - Accept client connections and read and write from/to clients
 while(True):
     # Listen to socket for client connections, to all clients for incoming messages
     # Check outputs for free space to write to clients
-    readable, writable, exceptional = select(inputs, outputs, [])
+    readable, _,_ = select(inputs, outputs, [])
 
     # Check all input sockets
     for s in readable:
+        print("ACTIVE CLIENTS: ", [name for _, (name,_) in clients.items()])
+
+        # Handle stdin Input
         if s is stdin:
+            print("Input Received From: stdin")
             # Read a line form the keyboard
             line = stdin.readline()
 
             # If EOF ==> sever wants to close connection to all clients
             if not line:
-                print('*** Server closing connection')
+                print('*** Server closing connection ...')
 
                 # Send the line to clients
                 # Close client connections
+                for client_sock_file, (client_name, client_sock) in clients.items():
+                    print(f'*** Closing Connection to "{client_name}"')
+                    client_sock.send(line.encode())
+                    client_sock_file.close()
+                    client_sock.close()
+
                 # Close server socket
                 server_sock.close()
                 exit(0)
 
+        # Handle Server Socket Input
         elif s is server_sock:
+            print("Input Reveived From: server_sock")
             # Receive new client connection on server socket
             client_sock, client_addr = server_sock.accept()
-            print(f'Connected to a client at {client_addr}')
+            print(f'*** Connected to a client at {client_addr}')
 
             # Make a file stream out of client socket
             client_sock_file = client_sock.makefile()
 
             # Read client name
-            client_name = client_sock_file.readline()
-            print(f'Connected to Client {client_name}')
+            client_name = client_sock_file.readline().strip()
+            print(f'*** Connected to Client {client_name}')
 
-            # Add client socket to dictionary
+            # Add client socket to dictionary and input list
             clients[client_sock_file] = (client_name, client_sock)
-
-            # Add client to inputs list
             inputs.append(client_sock_file)
 
+        # Handle Client Socket Inputs
         else:
-            print(s)
             # Input is from a client - write message to all clients
-            if(s.readline()):
-                print('yes')
+            print(f'Input Received From: {clients[s][0]}')
+            client_name = clients[s][0]
+            client_sock = clients[s][1]
 
+            line = s.readline()
+            if not line:
+                # Remove Client
+                print(f'*** Client {clients[s][0]} closed connection')
+                s.close()               # Close socket file
+                client_sock.close()     # Close socket
 
+                # Remove from clients and inputs list
+                del clients[s]
+                inputs.remove(s)
 
-# Keep sending and receiving messages from the client
-while True:
+                continue
 
-    # Wait for a message from keyboard or socket
-    readable_set, x, x = select(input_set,[],[])
+            print(f'\tMSG: {line}')
 
-    # Check if there is a message from the keyboard
-    if stdin in readable_set:
-        # Read a line form the keyboard
-        line = stdin.readline()
-
-        # If EOF ==> sever wants to close connection
-        if not line:
-            print('*** Server closing connection')
-            break
-
-        # Send the line to client
-        client_sock.send(line.encode())
-
-    # Check if there is a message from the client
-    if client_sock_file in readable_set:
-        # Read a message from the client
-        line = client_sock_file.readline()
-
-        # If EOF ==> client closed the connection
-        if not line:
-            print('*** Client closed connection')
-            break
-
-        # Display the line
-        print('Client:', line, end='')
-
-# Close the connection
-client_sock_file.close()
-client_sock.close()
-
-# End of program, close server socket
-server_sock.close()
-
-
+            # Send Message to all clients
+            for other_client_sock_file, (other_client_name, other_client_sock) in clients.items():
+                # Skip if its the client sending the message
+                if other_client_sock_file is s:
+                    continue
+                other_client_sock.send(f'[MSG from {client_name}]: {line}'.encode())

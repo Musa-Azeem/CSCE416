@@ -66,7 +66,7 @@ while True:
             break
 
         # Display the line
-        print('Server:', line, end='')
+        print(line, end='')
 
 # Close the connection
 sock_file.close()
