@@ -35,7 +35,7 @@ inputs = [stdin, server_sock]   # start by only listening on server socket and s
 while(True):
     # Listen to socket for client connections, to all clients for incoming messages
     # Check outputs for free space to write to clients
-    readable, _,_ = select(inputs, outputs, [])
+    readable, _,_ = select(inputs, [], [])
 
     # Check all input sockets
     for s in readable:
